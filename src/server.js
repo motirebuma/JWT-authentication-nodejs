@@ -1,8 +1,12 @@
 const express = require('express');
-const dotenv = require('dotenv');
 const bodyParser = require('body-parser');
 const sanitizeHtml = require('sanitize-html');
 const User = require("./model/user");
+const auth = require("./middleware/auth");
+const bcrypt = require('bcrypt');
+require("dotenv").config();
+require("./config/database").connect();
+
 
 const app = express();
 
@@ -13,16 +17,35 @@ app.use(bodyParser.urlencoded({extended: true}))
 // static folder
 app.use(express.static("public"));
 
+// input sanitizer
+function sanitizeInput(input) {
+    return sanitizeHtml(input, {
+      allowedTags: [],
+      allowedAttributes: {}
+    });
+}
+
+
 app.get("/", async (req, res) =>{
     res.sendFile(__dirname + "/index.html");
 });
 
-
 // register
+// get
+app.get("/register", async (req, res)=>{
+    res.sendFile(__dirname + "/public/register.html")
+});
+// post
 app.post("/register", async (req, res) => {
     try {
         // inputs
         const { first_name, last_name, email, password } = req.body;
+
+        // sanitize user inputs
+        const fname_ = sanitizeHtml(first_name);
+        const lname_ = sanitizeHtml(last_name);
+        const email_ = sanitizeHtml(email);
+        const passw_ = sanitizeHtml(password);
 
         // check if user already exist
         const isUserExist = await User.findOne({ email });
@@ -32,28 +55,28 @@ app.post("/register", async (req, res) => {
         }
 
         // Encrypt password with bcrypt.js / bcrypt
-        encryptedPassword = await bcrypt.hash(password, 10);
+        encryptedPassword = await bcrypt.hash(passw_, 10);
 
         // Create user in our database
         const user = await User.create({
-            first_name,
-            last_name,
-            email: email.toLowerCase(),
-            password: encryptedPassword,
+            fname_: fname_,
+            lname_: lname_,
+            email_: email_.toLowerCase(),
+            passw_: encryptedPassword,
         });
 
         // Create token
         const token = jwt.sign(
-            { user_id: user._id, email },
-            process.env.TOKEN_KEY,
+            { user_id: user._id, email_ },
+            process.env.JWT_KEY,
             {
-                expiresIn: "2h",
+                expiresIn: "1h",
             }
         );
         // save user token
         user.token = token;
         // return new user
-        res.status(201).json(user);
+        res.status(201).redirect("/login");
     } catch (err) {
         console.log(err);
     }
@@ -61,6 +84,10 @@ app.post("/register", async (req, res) => {
 
 
 // login
+// get login
+app.get("/login", async (req, res)=>{
+    res.sendFile(__dirname + "/public/login.html")
+});
 app.post("/login", async (req, res) => {
     try {
         //get user input
@@ -72,7 +99,7 @@ app.post("/login", async (req, res) => {
                 // Create token
                 const token = jwt.sign(
                     { user_id: user._id, email },
-                    process.env.TOKEN_KEY,
+                    process.env.JWT_KEY,
                     {
                     expiresIn: "1h",
                     }
@@ -81,7 +108,7 @@ app.post("/login", async (req, res) => {
                 user.token = token;
             
                 // user
-                res.status(200).send("Hello " + user.first_name);
+                res.status(200).redirect("/home");
                 }
             }
             else{
@@ -90,6 +117,9 @@ app.post("/login", async (req, res) => {
     } catch (err) {
         console.log(err);
     }
+});
+app.post("/home", async (req, res) => {
+    res.sendFile(__dirname + "public/home.html")
 });
 
 
@@ -100,5 +130,5 @@ if(port == null || port ==""){
 
 //listener
 app.listen(port, function(){
-    console.log("Server has started successfully.");
+    console.log(`Server has started successfully on port "${port}".`);
 });
