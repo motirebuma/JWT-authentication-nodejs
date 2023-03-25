@@ -5,10 +5,7 @@ const { MONGODB } = process.env;
 exports.connect = () => {
   // connect to db
   mongoose
-    .connect(MONGODB, {
-        useNewUrlParser: true,
-        useUnifiedTopology: true,
-    })
+    .connect(MONGODB)
     .then(() => {
         console.log("Successfully connected to database");
     })

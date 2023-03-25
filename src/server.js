@@ -1,5 +1,7 @@
 const express = require('express');
 const bodyParser = require('body-parser');
+const jwt = require("jsonwebtoken");
+const cookieParser = require('cookie-parser');
 const sanitizeHtml = require('sanitize-html');
 const User = require("./model/user");
 const auth = require("./middleware/auth");
@@ -13,6 +15,8 @@ const app = express();
 app.use(express.json());
 
 app.use(bodyParser.urlencoded({extended: true}))
+
+app.use(cookieParser());
 
 // static folder
 app.use(express.static("public"));
@@ -75,6 +79,7 @@ app.post("/register", async (req, res) => {
         );
         // save user token
         user.token = token;
+
         // return new user
         res.status(201).redirect("/login");
     } catch (err) {
@@ -92,13 +97,16 @@ app.post("/login", async (req, res) => {
     try {
         //get user input
         const { email, password } = req.body;
+        // sanitize user inputs
+        const email_ = sanitizeHtml(email).toLowerCase();
+        const passw_ = sanitizeHtml(password);
         // check if user exist
-        const user = await User.findOne({ email });
+        const user = await User.findOne({ email_ });
         if(user){
-            if(await bcrypt.compare(password, user.password)){
+            if(await bcrypt.compare(passw_, user.passw_)){
                 // Create token
                 const token = jwt.sign(
-                    { user_id: user._id, email },
+                    { user_id: user._id, email_ },
                     process.env.JWT_KEY,
                     {
                     expiresIn: "1h",
@@ -106,7 +114,9 @@ app.post("/login", async (req, res) => {
                 );
                 // save token
                 user.token = token;
-            
+                // save token to local catche/storage
+                res.cookie('jwt', token);
+
                 // user
                 res.status(200).redirect("/home");
                 }
@@ -118,13 +128,21 @@ app.post("/login", async (req, res) => {
         console.log(err);
     }
 });
-app.post("/home", async (req, res) => {
-    res.sendFile(__dirname + "public/home.html")
+
+app.get("/home", auth ,async (req, res) => {
+    res.sendFile(__dirname + "/public/home.html")
+});
+
+app.get("/logout", auth ,async (req, res) => {
+    // Get the JWT token from the cookie
+    const jwtToken = req.cookies.jwt; 
+    res.clearCookie('jwt');
+    res.redirect('/login');
 });
 
 
 let port = process.env.PORT;
-if(port == null || port ==""){
+if(port == null || port == ""){
     port = 3000;
 }
 
